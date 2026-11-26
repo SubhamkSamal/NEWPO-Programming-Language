@@ -1,0 +1,4 @@
+a := taker("What's your name: ")
+say("Name: ", a)
+b := taker("What's your age: ")
+say("Age after 2 year: ", b+2)
