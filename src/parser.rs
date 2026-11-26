@@ -15,10 +15,12 @@ impl Parser {
         }
     }
 
+    // Returns the current token without consuming it.
     fn current(&self) -> &Token {
         &self.tokens[self.position]
     }
 
+    // Consumes and returns the current token.
     fn advance(&mut self) -> Token {
         let token = self.current().clone();
 
@@ -29,6 +31,7 @@ impl Parser {
         token
     }
 
+    // Skips statement separators.
     fn skip_newlines(&mut self) {
         while matches!(
             self.current(),
@@ -38,6 +41,15 @@ impl Parser {
         }
     }
 
+    // Skips only newlines inside delimited expressions.
+    // Semicolons remain invalid inside collections and argument lists.
+    fn skip_collection_newlines(&mut self) {
+        while matches!(self.current(), Token::Newline) {
+            self.advance();
+        }
+    }
+
+    // Checks whether the current token matches the expected token.
     fn consume(
         &mut self,
         expected: Token,
@@ -47,10 +59,15 @@ impl Parser {
             self.advance();
             Ok(())
         } else {
-            Err(message.to_string())
+            Err(format!(
+                "{}. Found {:?}",
+                message,
+                self.current()
+            ))
         }
     }
 
+    // Parses the complete program.
     pub fn parse(&mut self) -> Result<Vec<Stmt>, String> {
         let mut statements = Vec::new();
 
@@ -64,10 +81,13 @@ impl Parser {
         Ok(statements)
     }
 
+    // Parses one statement.
     fn parse_statement(&mut self) -> Result<Stmt, String> {
         match self.current() {
             Token::When => self.parse_when(),
+
             Token::Loop => self.parse_loop(),
+
             Token::Function => self.parse_function(),
 
             Token::Return => {
@@ -75,11 +95,16 @@ impl Parser {
 
                 if matches!(
                     self.current(),
-                    Token::Newline | Token::Semicolon | Token::RightBrace
+                    Token::Newline
+                        | Token::Semicolon
+                        | Token::RightBrace
+                        | Token::Eof
                 ) {
                     Ok(Stmt::Return(None))
                 } else {
-                    Ok(Stmt::Return(Some(self.parse_expression(0)?)))
+                    Ok(Stmt::Return(Some(
+                        self.parse_expression(0)?
+                    )))
                 }
             }
 
@@ -97,18 +122,25 @@ impl Parser {
                 self.advance();
 
                 match self.advance() {
-                    Token::String(path) => Ok(Stmt::Import(path)),
-                    _ => Err("Expected a string path after import".to_string()),
+                    Token::String(path) => {
+                        Ok(Stmt::Import(path))
+                    }
+
+                    _ => Err(
+                        "Expected a string path after import".to_string()
+                    ),
                 }
             }
 
             Token::Identifier(name) => {
                 let name = name.clone();
 
-                if matches!(
+                let is_assignment = matches!(
                     self.tokens.get(self.position + 1),
                     Some(Token::Assign)
-                ) {
+                );
+
+                if is_assignment {
                     self.advance();
                     self.advance();
 
@@ -120,17 +152,25 @@ impl Parser {
                     })
                 } else {
                     let expression = self.parse_expression(0)?;
+
                     Ok(Stmt::Expression(expression))
                 }
             }
 
             _ => {
                 let expression = self.parse_expression(0)?;
+
                 Ok(Stmt::Expression(expression))
             }
         }
     }
 
+    // Parses:
+    // when condition {
+    //     statements
+    // } otherwise {
+    //     statements
+    // }
     fn parse_when(&mut self) -> Result<Stmt, String> {
         self.advance();
 
@@ -145,7 +185,10 @@ impl Parser {
 
         self.skip_newlines();
 
-        let otherwise = if matches!(self.current(), Token::Otherwise) {
+        let otherwise = if matches!(
+            self.current(),
+            Token::Otherwise
+        ) {
             self.advance();
 
             self.consume(
@@ -165,6 +208,10 @@ impl Parser {
         })
     }
 
+    // Parses:
+    // loop condition {
+    //     statements
+    // }
     fn parse_loop(&mut self) -> Result<Stmt, String> {
         self.advance();
 
@@ -183,12 +230,18 @@ impl Parser {
         })
     }
 
+    // Parses function declarations.
     fn parse_function(&mut self) -> Result<Stmt, String> {
         self.advance();
 
         let name = match self.advance() {
             Token::Identifier(name) => name,
-            _ => return Err("Expected function name".to_string()),
+
+            _ => {
+                return Err(
+                    "Expected function name".to_string()
+                );
+            }
         };
 
         self.consume(
@@ -198,23 +251,43 @@ impl Parser {
 
         let mut parameters = Vec::new();
 
+        self.skip_collection_newlines();
+
         if !matches!(self.current(), Token::RightParen) {
             loop {
+                self.skip_collection_newlines();
+
                 match self.advance() {
                     Token::Identifier(parameter) => {
                         parameters.push(parameter);
                     }
 
-                    _ => return Err("Expected parameter name".to_string()),
+                    _ => {
+                        return Err(
+                            "Expected parameter name".to_string()
+                        );
+                    }
                 }
+
+                self.skip_collection_newlines();
 
                 if matches!(self.current(), Token::Comma) {
                     self.advance();
+                    self.skip_collection_newlines();
+
+                    if matches!(
+                        self.current(),
+                        Token::RightParen
+                    ) {
+                        break;
+                    }
                 } else {
                     break;
                 }
             }
         }
+
+        self.skip_collection_newlines();
 
         self.consume(
             Token::RightParen,
@@ -235,6 +308,7 @@ impl Parser {
         })
     }
 
+    // Parses statements inside a block.
     fn parse_block(&mut self) -> Result<Vec<Stmt>, String> {
         let mut statements = Vec::new();
 
@@ -256,6 +330,7 @@ impl Parser {
         Ok(statements)
     }
 
+    // Parses expressions using operator precedence.
     fn parse_expression(
         &mut self,
         min_precedence: u8,
@@ -263,6 +338,8 @@ impl Parser {
         let mut left = self.parse_unary()?;
 
         loop {
+            // Conditional expression:
+            // condition ? value_if_true : value_if_false
             if matches!(self.current(), Token::Question) {
                 if min_precedence > 0 {
                     break;
@@ -290,6 +367,7 @@ impl Parser {
 
             let (operator, precedence) = match self.current() {
                 Token::Or => (BinaryOp::Or, 1),
+
                 Token::And => (BinaryOp::And, 2),
 
                 Token::Equal => (BinaryOp::Equal, 3),
@@ -315,7 +393,8 @@ impl Parser {
 
             self.advance();
 
-            let right = self.parse_expression(precedence + 1)?;
+            let right =
+                self.parse_expression(precedence + 1)?;
 
             left = Expr::Binary {
                 left: Box::new(left),
@@ -327,6 +406,7 @@ impl Parser {
         Ok(left)
     }
 
+    // Parses unary operators.
     fn parse_unary(&mut self) -> Result<Expr, String> {
         match self.current() {
             Token::Minus => {
@@ -351,27 +431,54 @@ impl Parser {
         }
     }
 
+    // Parses function calls and collection indexing.
     fn parse_postfix(&mut self) -> Result<Expr, String> {
         let mut expression = self.parse_primary()?;
 
         loop {
             match self.current() {
+                // Function call:
+                // function_name(arguments)
                 Token::LeftParen => {
                     self.advance();
 
                     let mut arguments = Vec::new();
 
-                    if !matches!(self.current(), Token::RightParen) {
-                        loop {
-                            arguments.push(self.parse_expression(0)?);
+                    self.skip_collection_newlines();
 
-                            if matches!(self.current(), Token::Comma) {
+                    if !matches!(
+                        self.current(),
+                        Token::RightParen
+                    ) {
+                        loop {
+                            self.skip_collection_newlines();
+
+                            arguments.push(
+                                self.parse_expression(0)?
+                            );
+
+                            self.skip_collection_newlines();
+
+                            if matches!(
+                                self.current(),
+                                Token::Comma
+                            ) {
                                 self.advance();
+                                self.skip_collection_newlines();
+
+                                if matches!(
+                                    self.current(),
+                                    Token::RightParen
+                                ) {
+                                    break;
+                                }
                             } else {
                                 break;
                             }
                         }
                     }
+
+                    self.skip_collection_newlines();
 
                     self.consume(
                         Token::RightParen,
@@ -384,10 +491,16 @@ impl Parser {
                     };
                 }
 
+                // Collection indexing:
+                // collection[index]
                 Token::LeftBracket => {
                     self.advance();
 
+                    self.skip_collection_newlines();
+
                     let index = self.parse_expression(0)?;
+
+                    self.skip_collection_newlines();
 
                     self.consume(
                         Token::RightBracket,
@@ -407,22 +520,34 @@ impl Parser {
         Ok(expression)
     }
 
+    // Parses primitive values and collection literals.
     fn parse_primary(&mut self) -> Result<Expr, String> {
         match self.advance() {
-            Token::Number(value) => Ok(Expr::Number(value)),
+            Token::Number(value) => {
+                Ok(Expr::Number(value))
+            }
 
-            Token::String(value) => Ok(Expr::String(value)),
+            Token::String(value) => {
+                Ok(Expr::String(value))
+            }
 
-            Token::True => Ok(Expr::Boolean(true)),
+            Token::True => {
+                Ok(Expr::Boolean(true))
+            }
 
-            Token::False => Ok(Expr::Boolean(false)),
+            Token::False => {
+                Ok(Expr::Boolean(false))
+            }
 
-            Token::Null => Ok(Expr::Null),
+            Token::Null => {
+                Ok(Expr::Null)
+            }
 
             Token::Identifier(name) => {
                 Ok(Expr::Variable(name))
             }
 
+            // Parenthesized expression.
             Token::LeftParen => {
                 let expression = self.parse_expression(0)?;
 
@@ -434,20 +559,47 @@ impl Parser {
                 Ok(expression)
             }
 
+            // List literal:
+            // [10, 20, 30]
+            // Also supports multiple lines.
             Token::LeftBracket => {
                 let mut elements = Vec::new();
 
-                if !matches!(self.current(), Token::RightBracket) {
-                    loop {
-                        elements.push(self.parse_expression(0)?);
+                self.skip_collection_newlines();
 
-                        if matches!(self.current(), Token::Comma) {
+                if !matches!(
+                    self.current(),
+                    Token::RightBracket
+                ) {
+                    loop {
+                        self.skip_collection_newlines();
+
+                        elements.push(
+                            self.parse_expression(0)?
+                        );
+
+                        self.skip_collection_newlines();
+
+                        if matches!(
+                            self.current(),
+                            Token::Comma
+                        ) {
                             self.advance();
+                            self.skip_collection_newlines();
+
+                            if matches!(
+                                self.current(),
+                                Token::RightBracket
+                            ) {
+                                break;
+                            }
                         } else {
                             break;
                         }
                     }
                 }
+
+                self.skip_collection_newlines();
 
                 self.consume(
                     Token::RightBracket,
@@ -457,29 +609,61 @@ impl Parser {
                 Ok(Expr::List(elements))
             }
 
+            // Dictionary literal:
+            // {
+            //     "name": "Alex",
+            //     "age": 20
+            // }
+            // Also supports multiple lines.
             Token::LeftBrace => {
                 let mut entries = Vec::new();
 
-                if !matches!(self.current(), Token::RightBrace) {
+                self.skip_collection_newlines();
+
+                if !matches!(
+                    self.current(),
+                    Token::RightBrace
+                ) {
                     loop {
+                        self.skip_collection_newlines();
+
                         let key = self.parse_expression(0)?;
+
+                        self.skip_collection_newlines();
 
                         self.consume(
                             Token::Colon,
                             "Expected ':' between dictionary key and value",
                         )?;
 
+                        self.skip_collection_newlines();
+
                         let value = self.parse_expression(0)?;
 
                         entries.push((key, value));
 
-                        if matches!(self.current(), Token::Comma) {
+                        self.skip_collection_newlines();
+
+                        if matches!(
+                            self.current(),
+                            Token::Comma
+                        ) {
                             self.advance();
+                            self.skip_collection_newlines();
+
+                            if matches!(
+                                self.current(),
+                                Token::RightBrace
+                            ) {
+                                break;
+                            }
                         } else {
                             break;
                         }
                     }
                 }
+
+                self.skip_collection_newlines();
 
                 self.consume(
                     Token::RightBrace,
@@ -489,10 +673,16 @@ impl Parser {
                 Ok(Expr::Dictionary(entries))
             }
 
-            token => Err(format!(
-                "Unexpected token in expression: {:?}",
-                token
-            )),
+            token => {
+                let position =
+                    self.position.saturating_sub(1);
+
+                Err(format!(
+                    "Unexpected token in expression: {:?} at token position {}",
+                    token,
+                    position
+                ))
+            }
         }
     }
 }

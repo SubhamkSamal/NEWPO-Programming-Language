@@ -1,10 +1,10 @@
-import "messages.po"
+
+import "examples/messages.po"
 
 welcome("Student")
 
 name := taker("Enter student name: ")
 age := taker("Enter student age: ")
-scholarship := taker("Scholarship eligible? (true/false): ")
 
 say("")
 say("Hello,", name)
@@ -44,8 +44,6 @@ function calculate_average(total, count) {
 
 average := calculate_average(total, length(scores))
 
-result := average >= 50 ? "PASS" : "FAIL"
-
 grade := "F"
 
 when average >= 90 {
@@ -64,14 +62,40 @@ when average >= 90 {
     }
 }
 
+result := "Fail"
+
+when average >= 50 {
+    result := "Pass"
+}
+
+scholarship := false
+
+when average >= 75 {
+    scholarship := true
+}
+
+remarks := "Needs improvement"
+
+when average >= 50 {
+    remarks := "Satisfactory"
+}
+
+when average >= 75 {
+    remarks := "Good academic performance"
+}
+
+when average >= 90 {
+    remarks := "Excellent academic performance"
+}
+
 student := {
     "name": name,
     "age": age,
-    "scholarship": scholarship,
     "average": average,
     "result": result,
     "grade": grade,
-    "remarks": null
+    "scholarship": scholarship,
+    "remarks": remarks
 }
 
 say("")
@@ -79,7 +103,6 @@ say("========== ACADEMIC REPORT ==========")
 
 say("Student:", student["name"])
 say("Age:", student["age"])
-say("Scholarship:", student["scholarship"])
 
 say("")
 say("Subjects:", subjects)
@@ -91,19 +114,20 @@ say("Grade:", grade)
 say("Result:", result)
 
 say("")
+say("Scholarship eligible:", scholarship)
 say("Profile fields:", keys(student))
 say("Number of subjects:", length(subjects))
 
-when scholarship and average >= 75 {
+when scholarship {
     say("Scholarship status: Eligible")
 } otherwise {
     say("Scholarship status: Not eligible")
 }
 
 say("Is the student under 18?", age < 18)
-say("Is the student not eligible?", not scholarship)
 
 say("")
+say("Remarks:", remarks)
 say("Student profile:", student)
 
 goodbye(name)
