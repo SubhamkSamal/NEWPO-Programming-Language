@@ -1,0 +1,13 @@
+function welcome(name) {
+    say("")
+    say("================================")
+    say("       NEWPO STUDENT REPORT")
+    say("================================")
+    say("Welcome,", name)
+}
+
+function goodbye(name) {
+    say("")
+    say("Thank you for using Newpo,", name)
+    say("Report generation complete!")
+}

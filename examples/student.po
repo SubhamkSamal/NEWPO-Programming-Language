@@ -1,0 +1,109 @@
+import "messages.po"
+
+welcome("Student")
+
+name := taker("Enter student name: ")
+age := taker("Enter student age: ")
+scholarship := taker("Scholarship eligible? (true/false): ")
+
+say("")
+say("Hello,", name)
+say("Collecting your academic information...")
+say("")
+
+subjects := ["Mathematics", "Science", "English", "Art"]
+subjects := remove(subjects, 3)
+
+scores := []
+
+counter := 0
+
+loop counter < 3 {
+    say("Enter marks for:", subjects[counter])
+
+    mark := taker("Marks out of 100: ")
+
+    scores := append(scores, mark)
+
+    counter := counter + 1
+
+    when counter == 2 {
+        continue
+    }
+
+    when counter == 3 {
+        break
+    }
+}
+
+total := scores[0] + scores[1] + scores[2]
+
+function calculate_average(total, count) {
+    return total / count
+}
+
+average := calculate_average(total, length(scores))
+
+result := average >= 50 ? "PASS" : "FAIL"
+
+grade := "F"
+
+when average >= 90 {
+    grade := "A"
+} otherwise {
+    when average >= 75 {
+        grade := "B"
+    } otherwise {
+        when average >= 60 {
+            grade := "C"
+        } otherwise {
+            when average >= 50 {
+                grade := "D"
+            }
+        }
+    }
+}
+
+student := {
+    "name": name,
+    "age": age,
+    "scholarship": scholarship,
+    "average": average,
+    "result": result,
+    "grade": grade,
+    "remarks": null
+}
+
+say("")
+say("========== ACADEMIC REPORT ==========")
+
+say("Student:", student["name"])
+say("Age:", student["age"])
+say("Scholarship:", student["scholarship"])
+
+say("")
+say("Subjects:", subjects)
+say("Marks:", scores)
+
+say("Total:", total)
+say("Average:", average)
+say("Grade:", grade)
+say("Result:", result)
+
+say("")
+say("Profile fields:", keys(student))
+say("Number of subjects:", length(subjects))
+
+when scholarship and average >= 75 {
+    say("Scholarship status: Eligible")
+} otherwise {
+    say("Scholarship status: Not eligible")
+}
+
+say("Is the student under 18?", age < 18)
+say("Is the student not eligible?", not scholarship)
+
+say("")
+say("Student profile:", student)
+
+goodbye(name)
